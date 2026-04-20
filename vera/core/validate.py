@@ -3,6 +3,7 @@
 Runs at `vera add` (before installing into the registry) and again at `vera start`
 (fail-fast gate; catches hand-edits to a registered challenge).
 """
+
 from __future__ import annotations
 
 import os
@@ -61,7 +62,7 @@ def validate_challenge(challenge_dir: Path) -> ChallengeMeta:
     data = load_vera_yaml(challenge_dir)
     try:
         schema.validate_vera_yaml(data)
-    except Exception as exc:
+    except schema.SchemaError as exc:
         raise ChallengeError(f"vera.yaml schema: {exc}") from exc
 
     slug = data["slug"]
@@ -97,9 +98,7 @@ def validate_challenge(challenge_dir: Path) -> ChallengeMeta:
         try:
             timebudget.parse_duration(tb)
         except ValueError as exc:
-            raise ChallengeError(
-                f"variant {v.get('name', '?')}: {exc}"
-            ) from exc
+            raise ChallengeError(f"variant {v.get('name', '?')}: {exc}") from exc
 
     return ChallengeMeta(
         slug=slug,

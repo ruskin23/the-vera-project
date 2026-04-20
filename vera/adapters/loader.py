@@ -1,4 +1,5 @@
 """Adapter loader: three-tier precedence, CONTRACT_VERSION gate, HARNESS_ID first-match."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -24,7 +25,7 @@ class LoadedAdapter:
     def detect(self) -> bool:
         try:
             return bool(self.module.detect())
-        except Exception:
+        except Exception:  # adapter contract: detect() is a probe; any raise = absent
             return False
 
 
@@ -62,7 +63,7 @@ def _load_module_from_file(path: Path, unique_name: str) -> types.ModuleType:
     sys.modules[unique_name] = module
     try:
         spec.loader.exec_module(module)
-    except Exception:
+    except Exception:  # re-raised immediately; broad catch only scopes the sys.modules cleanup
         sys.modules.pop(unique_name, None)
         raise
     return module
@@ -72,14 +73,12 @@ def _load_one(path: Path, group: str) -> LoadedAdapter | AdapterLoadError:
     unique = f"vera_adapter_{group}_{path.stem}"
     try:
         module = _load_module_from_file(path, unique)
-    except Exception as exc:
+    except Exception as exc:  # adapter modules are user code; surface any import failure
         return AdapterLoadError(source=path, source_group=group, reason=f"import error: {exc}")
 
     for attr in ("HARNESS_ID", "CONTRACT_VERSION", "detect", "sessions_for_run", "session_turns"):
         if not hasattr(module, attr):
-            return AdapterLoadError(
-                source=path, source_group=group, reason=f"missing {attr}"
-            )
+            return AdapterLoadError(source=path, source_group=group, reason=f"missing {attr}")
 
     harness_id = module.HARNESS_ID
     contract_version = module.CONTRACT_VERSION
@@ -137,9 +136,7 @@ def discover_all() -> AdapterGroups:
     user, e2 = _scan_dir(config.user_adapters_dir(), "user")
     package_dir = _package_adapter_dir()
     package_files = [
-        p
-        for p in sorted(package_dir.glob("*.py"))
-        if p.name not in ("__init__.py", "loader.py")
+        p for p in sorted(package_dir.glob("*.py")) if p.name not in ("__init__.py", "loader.py")
     ]
     package: list[LoadedAdapter] = []
     e3: list[AdapterLoadError] = []

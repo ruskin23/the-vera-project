@@ -8,7 +8,6 @@ from click.testing import CliRunner
 from vera.cli.cmd_info import info_cmd
 from vera.core import config, registry
 
-
 FIXTURE = Path(__file__).parent / "fixtures" / "catalog.json"
 
 
@@ -33,9 +32,7 @@ class TestInfo:
         assert "symlink →" in result.output
         assert str(simple_challenge.resolve()) in result.output or "symlink" in result.output
 
-    def test_shows_update_available_when_catalog_ahead(
-        self, simple_challenge: Path
-    ) -> None:
+    def test_shows_update_available_when_catalog_ahead(self, simple_challenge: Path) -> None:
         registry.add(str(simple_challenge))
         # Manually set .vera_version so we have a local version to compare.
         (config.registry_path() / "challenge-simple" / ".vera_version").write_text("v1.0.0\n")

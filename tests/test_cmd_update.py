@@ -8,7 +8,6 @@ from click.testing import CliRunner
 from vera.cli.cmd_update import update_cmd
 from vera.core import config, registry
 
-
 FIXTURE = Path(__file__).parent / "fixtures" / "catalog.json"
 
 
@@ -36,13 +35,15 @@ class TestUpdate:
         (config.registry_path() / "challenge-simple" / ".vera_version").write_text("v1.0.0\n")
         # Edit the cached catalog to include this slug at v1.0.0.
         cached = json.loads(config.catalog_cache_path().read_text())
-        cached["entries"].append({
-            "slug": "challenge-simple",
-            "type": "single",
-            "title": "fixture",
-            "url": "https://example.com/challenge-simple",
-            "version": "v1.0.0",
-        })
+        cached["entries"].append(
+            {
+                "slug": "challenge-simple",
+                "type": "single",
+                "title": "fixture",
+                "url": "https://example.com/challenge-simple",
+                "version": "v1.0.0",
+            }
+        )
         config.catalog_cache_path().write_text(json.dumps(cached))
 
         result = CliRunner().invoke(update_cmd, ["challenge-simple"])

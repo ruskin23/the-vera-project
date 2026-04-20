@@ -1,18 +1,22 @@
 """Invoke grader/grade.sh, parse stdout JSON, merge CLI-derived fields, write result.json."""
+
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import signal
 import subprocess
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import FrameType
 from typing import Any
 
 from vera.adapters import loader as adapter_loader
-from vera.core import compose, harness, runs, schema
+from vera.core import compose, config, harness, runs, schema, timebudget
 
 
 class GraderError(RuntimeError):
@@ -33,12 +37,12 @@ class GradeOutcome:
 
 
 @contextmanager
-def _teardown_guard(run_dir: Path, container: bool, keep_stack: bool):
+def _teardown_guard(run_dir: Path, container: bool, keep_stack: bool) -> Iterator[None]:
     """Ensure compose down runs on any exit path (except --keep-stack)."""
     interrupted = {"flag": False}
     previous_sigint = signal.getsignal(signal.SIGINT)
 
-    def _handler(signum, frame):
+    def _handler(signum: int, frame: FrameType | None) -> None:
         interrupted["flag"] = True
         raise KeyboardInterrupt()
 
@@ -97,18 +101,14 @@ def _run_grader(run_dir: Path) -> tuple[dict[str, Any], int, float]:
             f"grader reported pass:true but exited with {exit_code}; these must agree"
         )
     if not pass_field and exit_code == 0:
-        raise GraderError(
-            "grader reported pass:false but exited with 0; these must agree"
-        )
+        raise GraderError("grader reported pass:false but exited with 0; these must agree")
 
     return data, exit_code, elapsed
 
 
 def _budget_seconds(pin: dict[str, Any]) -> int | None:
-    from vera.core.timebudget import parse_duration
-
     try:
-        return parse_duration(pin.get("time_budget"))
+        return timebudget.parse_duration(pin.get("time_budget"))
     except ValueError:
         return None
 
@@ -143,21 +143,19 @@ def grade(run: runs.ActiveRun, skip_pin_check: bool, keep_stack: bool) -> GradeO
             result_obj["score"] = grader_data["score"]
         if "signals" in grader_data:
             result_obj["signals"] = grader_data["signals"]
-        if "notes" in grader_data and grader_data["notes"]:
+        if grader_data.get("notes"):
             result_obj["notes"] = grader_data["notes"]
         if outcome.collaboration is not None:
             result_obj["collaboration"] = outcome.collaboration
 
         runs.write_result(run_dir, result_obj)
 
-        try:
+        with contextlib.suppress(runs.RunError):
             runs.compute_diff(
                 _registry_workspace_for(run),
                 run_dir / "workspace",
                 run_dir / "diff.patch",
             )
-        except runs.RunError:
-            pass
 
     return GradeOutcome(
         run_dir=run_dir,
@@ -176,6 +174,4 @@ def _run_is_container(run_dir: Path) -> bool:
 
 
 def _registry_workspace_for(run: runs.ActiveRun) -> Path:
-    from vera.core import config
-
     return config.registry_path() / run.slug / "workspace"

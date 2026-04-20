@@ -6,7 +6,6 @@ from ruamel.yaml import YAML
 
 from vera.core.compose import rewrite_compose_for_run
 
-
 COMPOSE_BEFORE = """\
 # top-level comment
 services:

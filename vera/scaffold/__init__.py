@@ -7,4 +7,5 @@ class ScaffoldError(RuntimeError):
 
 def create(slug: str, container: bool = False) -> list[str]:
     from vera.scaffold._create import create as _create
+
     return _create(slug=slug, container=container)

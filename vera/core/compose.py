@@ -5,6 +5,7 @@ side of the bind mount in setup/compose.yaml. At `vera start`, the rewriter swap
 `./workspace` for the absolute path to the run's workspace directory. Other volumes
 are left untouched. Round-trip fidelity (comments, key order) is preserved via ruamel.yaml.
 """
+
 from __future__ import annotations
 
 import io

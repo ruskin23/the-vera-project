@@ -9,7 +9,6 @@ import pytest
 
 from vera.core import catalog, config
 
-
 FIXTURE = Path(__file__).parent / "fixtures" / "catalog.json"
 
 
@@ -52,6 +51,7 @@ class TestFetch:
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         cache_path.write_text(json.dumps(fixture_catalog))
         import os as _os
+
         old = time.time() - (7 * 3600)
         _os.utime(cache_path, (old, old))
 
@@ -68,18 +68,23 @@ class TestFetch:
         cache_path.write_text(json.dumps(fixture_catalog))
         # Make cache stale so fetch tries network.
         import os as _os
+
         old = time.time() - (7 * 3600)
         _os.utime(cache_path, (old, old))
 
-        with patch("vera.core.catalog.requests.get", side_effect=ConnectionError("no net")):
-            with pytest.warns(UserWarning, match="catalog fetch failed"):
-                data = catalog.fetch(force=False)
+        with (
+            patch("vera.core.catalog.requests.get", side_effect=ConnectionError("no net")),
+            pytest.warns(UserWarning, match="catalog fetch failed"),
+        ):
+            data = catalog.fetch(force=False)
         assert data["schema_version"] == 1
 
     def test_offline_no_cache_raises(self) -> None:
-        with patch("vera.core.catalog.requests.get", side_effect=ConnectionError("no net")):
-            with pytest.raises(catalog.CatalogError, match="catalog unreachable"):
-                catalog.fetch(force=True)
+        with (
+            patch("vera.core.catalog.requests.get", side_effect=ConnectionError("no net")),
+            pytest.raises(catalog.CatalogError, match="catalog unreachable"),
+        ):
+            catalog.fetch(force=True)
 
 
 class TestResolve:

@@ -44,9 +44,7 @@ class TestAddLocal:
 
 
 class TestAdapterStripping:
-    def test_add_does_not_install_adapters(
-        self, tmp_path: Path, simple_challenge: Path
-    ) -> None:
+    def test_add_does_not_install_adapters(self, tmp_path: Path, simple_challenge: Path) -> None:
         # Put the challenge into a temp "git-like" dir so we trigger copy path
         # instead of symlink. Simulate a tarball URL by just calling _install_copy
         # directly: easier to test via the public API using a tarball.

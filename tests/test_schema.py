@@ -60,19 +60,19 @@ class TestVeraYaml:
     def test_missing_slug_fails(self) -> None:
         bad = _valid_vera_yaml()
         del bad["slug"]
-        with pytest.raises(Exception):
+        with pytest.raises(schema.SchemaError):
             schema.validate_vera_yaml(bad)
 
     def test_bad_slug_pattern_fails(self) -> None:
         bad = _valid_vera_yaml()
         bad["slug"] = "Not_Valid"
-        with pytest.raises(Exception):
+        with pytest.raises(schema.SchemaError):
             schema.validate_vera_yaml(bad)
 
     def test_no_variants_fails(self) -> None:
         bad = _valid_vera_yaml()
         bad["variants"] = []
-        with pytest.raises(Exception):
+        with pytest.raises(schema.SchemaError):
             schema.validate_vera_yaml(bad)
 
 
@@ -83,7 +83,7 @@ class TestRunJson:
     def test_missing_pin_fails(self) -> None:
         bad = _valid_run_json()
         del bad["pin"]
-        with pytest.raises(Exception):
+        with pytest.raises(schema.SchemaError):
             schema.validate_run_json(bad)
 
 
@@ -94,11 +94,11 @@ class TestResultJson:
     def test_missing_required_fails(self) -> None:
         bad = _valid_result_json()
         del bad["pin_honored"]
-        with pytest.raises(Exception):
+        with pytest.raises(schema.SchemaError):
             schema.validate_result_json(bad)
 
     def test_bad_pin_honored_enum_fails(self) -> None:
         bad = _valid_result_json()
         bad["pin_honored"] = "maybe"
-        with pytest.raises(Exception):
+        with pytest.raises(schema.SchemaError):
             schema.validate_result_json(bad)

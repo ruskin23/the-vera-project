@@ -34,8 +34,7 @@ def format_duration(seconds: int | None) -> str:
     """Render seconds as a human string matching doc examples (e.g. '2h', '1h 47m')."""
     if seconds is None:
         return "unbounded"
-    if seconds < 0:
-        seconds = 0
+    seconds = max(seconds, 0)
     days, rem = divmod(seconds, 86400)
     hours, rem = divmod(rem, 3600)
     minutes, secs = divmod(rem, 60)
@@ -55,8 +54,7 @@ def format_duration(seconds: int | None) -> str:
 
 def format_elapsed(seconds: int) -> str:
     """Render elapsed time as the docs show it: '1h 47m' or '47m' or '1h'."""
-    if seconds < 0:
-        seconds = 0
+    seconds = max(seconds, 0)
     hours, rem = divmod(seconds, 3600)
     minutes, _secs = divmod(rem, 60)
     if hours and minutes:

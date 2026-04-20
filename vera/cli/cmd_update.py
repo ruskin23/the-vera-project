@@ -7,8 +7,19 @@ import click
 
 @click.command()
 @click.argument("slug", required=False)
-@click.option("--all", "all_flag", is_flag=True, default=False, help="Update every registered challenge.")
-@click.option("--refresh", is_flag=True, default=False, help="Force-refetch the catalog before comparing.")
+@click.option(
+    "--all",
+    "all_flag",
+    is_flag=True,
+    default=False,
+    help="Update every registered challenge.",
+)
+@click.option(
+    "--refresh",
+    is_flag=True,
+    default=False,
+    help="Force-refetch the catalog before comparing.",
+)
 def update_cmd(slug: str | None, all_flag: bool, refresh: bool) -> None:
     """Update registered challenges against the catalog's current versions."""
     from vera.core import catalog, registry, render

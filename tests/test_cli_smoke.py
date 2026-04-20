@@ -1,17 +1,14 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
-
 
 PROJECT_ROOT = Path(__file__).parent.parent
 
 
 def _run_vera(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess:
-    env = {"PATH": "/usr/bin:/bin"}
-    import os
-
     env = {**os.environ}
     return subprocess.run(
         [sys.executable, "-m", "vera.cli", *args],
@@ -19,6 +16,7 @@ def _run_vera(*args: str, cwd: Path | None = None) -> subprocess.CompletedProces
         capture_output=True,
         text=True,
         env=env,
+        check=False,
     )
 
 

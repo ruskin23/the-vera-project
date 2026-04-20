@@ -19,9 +19,7 @@ WS = Path("/tmp/does-not-matter/workspace")
 
 class TestPinHonored:
     def test_no_adapter_is_unclear(self) -> None:
-        out = verify_and_collect(
-            pin_model="claude-opus-4-7", adapter=None, workspace_path=WS
-        )
+        out = verify_and_collect(pin_model="claude-opus-4-7", adapter=None, workspace_path=WS)
         assert out.pin_honored == "unclear"
         assert out.collaboration is None
 

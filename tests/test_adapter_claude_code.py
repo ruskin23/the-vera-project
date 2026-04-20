@@ -6,8 +6,9 @@ from pathlib import Path
 
 from vera.adapters import claude_code
 
-
-FIXTURE = Path(__file__).parent / "fixtures" / "session-logs" / "claude-code" / "session_example.jsonl"
+FIXTURE = (
+    Path(__file__).parent / "fixtures" / "session-logs" / "claude-code" / "session_example.jsonl"
+)
 
 
 def test_session_turns_extracts_assistant_turns() -> None:
@@ -48,9 +49,7 @@ def test_sessions_for_run_scopes_by_workspace_path(tmp_path: Path, monkeypatch) 
 def test_sessions_for_run_returns_empty_when_no_sessions(tmp_path: Path, monkeypatch) -> None:
     workspace = tmp_path / "runs" / "slug" / "2026-04-19_1000" / "workspace"
     workspace.mkdir(parents=True)
-    monkeypatch.setattr(
-        claude_code, "LOG_DIR", tmp_path / "home" / ".claude" / "projects"
-    )
+    monkeypatch.setattr(claude_code, "LOG_DIR", tmp_path / "home" / ".claude" / "projects")
     assert claude_code.sessions_for_run(workspace) == []
 
 

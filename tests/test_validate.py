@@ -33,7 +33,7 @@ class TestValidateChallenge:
     def test_container_without_compose(self, simple_challenge: Path) -> None:
         yaml = simple_challenge / "vera.yaml"
         yaml.write_text(yaml.read_text().replace("container: false", "container: true"))
-        with pytest.raises(ChallengeError, match="compose.yaml"):
+        with pytest.raises(ChallengeError, match=r"compose\.yaml"):
             validate_challenge(simple_challenge)
 
 

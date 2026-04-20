@@ -4,7 +4,6 @@ from pathlib import Path
 
 from vera.adapters import codex_cli
 
-
 FIXTURE = Path(__file__).parent / "fixtures" / "session-logs" / "codex-cli" / "session.jsonl"
 
 

@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import os
-import time
 from pathlib import Path
 
 from vera.adapters import opencode
-
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "session-logs" / "opencode"
 

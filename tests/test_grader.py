@@ -33,11 +33,7 @@ class TestGrade:
         # Sabotage the grader to mismatch exit/code and pass.
         active = runs.active_run()
         gs = active.run_dir / "grader" / "grade.sh"
-        gs.write_text(
-            "#!/usr/bin/env bash\n"
-            "echo '{\"pass\": true}'\n"
-            "exit 1\n"
-        )
+        gs.write_text("#!/usr/bin/env bash\necho '{\"pass\": true}'\nexit 1\n")
         gs.chmod(0o755)
         with pytest.raises(grader.GraderError, match="exited with"):
             grader.grade(run=active, skip_pin_check=True, keep_stack=False)

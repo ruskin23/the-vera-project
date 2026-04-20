@@ -1,4 +1,5 @@
 """JSON schemas for vera.yaml, run.json, result.json."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -123,9 +124,7 @@ CATALOG_SCHEMA: dict[str, Any] = {
         "schema_version": {"type": "integer"},
         "entries": {
             "type": "array",
-            "items": {
-                "oneOf": [CATALOG_ENTRY_SINGLE_SCHEMA, CATALOG_ENTRY_PACK_SCHEMA]
-            },
+            "items": {"oneOf": [CATALOG_ENTRY_SINGLE_SCHEMA, CATALOG_ENTRY_PACK_SCHEMA]},
         },
     },
     "additionalProperties": True,
@@ -164,7 +163,10 @@ RESULT_JSON_SCHEMA: dict[str, Any] = {
         "signals": {"type": "object"},
         "notes": {"type": "string"},
         "elapsed_seconds": {"type": "integer", "minimum": 0},
-        "pin_honored": {"type": "string", "enum": ["yes", "no", "unclear", "skipped"]},
+        "pin_honored": {
+            "type": "string",
+            "enum": ["yes", "no", "unclear", "skipped", "unimplemented"],
+        },
         "collaboration": COLLABORATION_SCHEMA,
     },
     "additionalProperties": True,
@@ -185,32 +187,32 @@ GRADER_OUTPUT_SCHEMA: dict[str, Any] = {
 }
 
 
-def validate_vera_yaml(data: dict[str, Any]) -> None:
-    jsonschema.validate(data, VERA_YAML_SCHEMA)
-
-
-def validate_run_json(data: dict[str, Any]) -> None:
-    jsonschema.validate(data, RUN_JSON_SCHEMA)
-
-
-def validate_result_json(data: dict[str, Any]) -> None:
-    jsonschema.validate(data, RESULT_JSON_SCHEMA)
-
-
-def validate_grader_output(data: dict[str, Any]) -> None:
-    jsonschema.validate(data, GRADER_OUTPUT_SCHEMA)
-
-
-def validate_catalog(data: dict[str, Any]) -> None:
-    jsonschema.validate(data, CATALOG_SCHEMA)
-
-
 class SchemaError(ValueError):
     """Raised when a document fails schema validation."""
 
 
-def check(data: dict[str, Any], schema: dict[str, Any], label: str) -> None:
+def _validate(data: dict[str, Any], schema: dict[str, Any], label: str) -> None:
     try:
         jsonschema.validate(data, schema)
     except jsonschema.ValidationError as exc:
         raise SchemaError(f"{label}: {exc.message} at {list(exc.absolute_path)}") from exc
+
+
+def validate_vera_yaml(data: dict[str, Any]) -> None:
+    _validate(data, VERA_YAML_SCHEMA, "vera.yaml")
+
+
+def validate_run_json(data: dict[str, Any]) -> None:
+    _validate(data, RUN_JSON_SCHEMA, "run.json")
+
+
+def validate_result_json(data: dict[str, Any]) -> None:
+    _validate(data, RESULT_JSON_SCHEMA, "result.json")
+
+
+def validate_grader_output(data: dict[str, Any]) -> None:
+    _validate(data, GRADER_OUTPUT_SCHEMA, "grader output")
+
+
+def validate_catalog(data: dict[str, Any]) -> None:
+    _validate(data, CATALOG_SCHEMA, "catalog.json")

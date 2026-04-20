@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from click.testing import CliRunner
 
 from vera.cli.cmd_discover import discover_cmd
 from vera.core import config
-
 
 FIXTURE = Path(__file__).parent / "fixtures" / "catalog.json"
 
@@ -53,6 +51,7 @@ class TestDiscover:
     def test_error_when_catalog_unreachable(self) -> None:
         # No cache, no network -- expect error.
         from unittest.mock import patch
+
         with patch("vera.core.catalog.requests.get", side_effect=ConnectionError("no net")):
             result = CliRunner().invoke(discover_cmd, [])
         assert result.exit_code == 1

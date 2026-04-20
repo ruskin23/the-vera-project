@@ -16,11 +16,14 @@ class TestShell:
         monkeypatch.setenv("SHELL", "/bin/sh")
         captured = {}
 
-        def fake_run(args, cwd):
+        def fake_run(args, cwd, check):
             captured["args"] = args
             captured["cwd"] = cwd
+            captured["check"] = check
+
             class R:
                 returncode = 0
+
             return R()
 
         with patch("vera.cli.cmd_shell.subprocess.run", side_effect=fake_run):

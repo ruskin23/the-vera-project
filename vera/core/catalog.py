@@ -12,12 +12,14 @@ cache with a warning; if no cache exists, raise CatalogError.
 The catalog is a *discovery* mechanism, not a protocol contract — nothing in
 Vera's execution path requires it. Users can always `vera add <url>` directly.
 """
+
 from __future__ import annotations
 
 import json
 import time
 import warnings
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -36,13 +38,13 @@ class ResolvedEntry:
     slug: str
     url: str
     version: str
-    path: str | None          # subpath within the repo, or None for whole-repo
+    path: str | None  # subpath within the repo, or None for whole-repo
     title: str
     description: str
     tags: list[str]
     author: str | None
     difficulty: str | None
-    type: str                  # "single" or "pack-child"
+    type: str  # "single" or "pack-child"
 
 
 @dataclass
@@ -57,7 +59,7 @@ class PackSummary:
     children: list[ResolvedEntry]
 
 
-def _cache_stale(path) -> bool:
+def _cache_stale(path: Path) -> bool:
     if not path.exists():
         return True
     age = time.time() - path.stat().st_mtime
@@ -105,13 +107,9 @@ def fetch(force: bool = False) -> dict[str, Any]:
         return data
     except Exception as exc:
         if cache is not None:
-            warnings.warn(
-                f"catalog fetch failed ({exc}); using cached copy", stacklevel=2
-            )
+            warnings.warn(f"catalog fetch failed ({exc}); using cached copy", stacklevel=2)
             return cache
-        raise CatalogError(
-            f"catalog unreachable at {url} and no cache available: {exc}"
-        ) from exc
+        raise CatalogError(f"catalog unreachable at {url} and no cache available: {exc}") from exc
 
 
 def _entries(data: dict[str, Any]) -> list[dict[str, Any]]:

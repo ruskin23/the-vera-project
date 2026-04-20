@@ -71,9 +71,7 @@ class TestDiscoverAll:
     def test_missing_function_rejected(self, isolated_env: Path) -> None:
         user_dir = config.user_adapters_dir()
         user_dir.mkdir(parents=True, exist_ok=True)
-        (user_dir / "broken.py").write_text(
-            "HARNESS_ID = 'broken'\nCONTRACT_VERSION = 1\n"
-        )
+        (user_dir / "broken.py").write_text("HARNESS_ID = 'broken'\nCONTRACT_VERSION = 1\n")
         groups = loader.discover_all()
         assert not any(a.harness_id == "broken" for a in groups.flat())
         assert any("broken" in e.source.name for e in groups.errors)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from typing import Any
 
 import click
 
@@ -61,7 +62,7 @@ def discover_cmd(
 
     packs, singles = catalog.list_all(data)
 
-    def matches(entry, entry_tags: list[str]) -> bool:
+    def matches(entry: Any, entry_tags: list[str]) -> bool:
         if tags and not any(t in entry_tags for t in tags):
             return False
         if search:

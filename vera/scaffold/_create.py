@@ -1,4 +1,5 @@
 """Scaffold a new challenge via `vera new`."""
+
 from __future__ import annotations
 
 from pathlib import Path

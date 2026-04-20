@@ -16,9 +16,7 @@ def _looks_like_source(arg: str) -> bool:
     if Path(arg).expanduser().exists():
         return True
     # Contains a slash or backslash — probably a path even if it doesn't exist yet.
-    if "/" in arg or "\\" in arg:
-        return True
-    return False
+    return "/" in arg or "\\" in arg
 
 
 @click.command()
@@ -48,14 +46,10 @@ def add_cmd(source_or_slug: str, path: str | None) -> None:
             results = []
             for child in pack_children:
                 try:
-                    result = registry.add(
-                        child.url, subpath=child.path, version=child.version
-                    )
+                    result = registry.add(child.url, subpath=child.path, version=child.version)
                     results.extend(result)
                 except registry.RegistryError as exc:
-                    click.echo(
-                        f"error installing {child.slug}: {exc}", err=True
-                    )
+                    click.echo(f"error installing {child.slug}: {exc}", err=True)
                     sys.exit(1)
             render.render_add(results)
             return
@@ -70,9 +64,7 @@ def add_cmd(source_or_slug: str, path: str | None) -> None:
             sys.exit(1)
 
         try:
-            results = registry.add(
-                entry.url, subpath=entry.path, version=entry.version
-            )
+            results = registry.add(entry.url, subpath=entry.path, version=entry.version)
         except registry.RegistryError as exc:
             click.echo(f"error: {exc}", err=True)
             sys.exit(1)

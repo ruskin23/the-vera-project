@@ -26,5 +26,5 @@ def shell_cmd(slug: str | None) -> None:
 
     workspace = (active.run_dir / "workspace").resolve()
     shell = os.environ.get("SHELL", "/bin/sh")
-    result = subprocess.run([shell], cwd=workspace)
+    result = subprocess.run([shell], cwd=workspace, check=False)
     sys.exit(result.returncode)

@@ -1,4 +1,5 @@
 """Challenge registry: clone/extract/symlink/validate/install."""
+
 from __future__ import annotations
 
 import shutil
@@ -60,10 +61,9 @@ def _write_version(challenge_dir: Path, version: str | None) -> None:
 
 
 def _is_git_url(source: str) -> bool:
-    return (
-        source.startswith(("http://", "https://", "git@", "ssh://", "git+", "git://"))
-        or source.endswith(".git")
-    )
+    return source.startswith(
+        ("http://", "https://", "git@", "ssh://", "git+", "git://")
+    ) or source.endswith(".git")
 
 
 def _is_tarball_url(source: str) -> bool:
@@ -120,9 +120,7 @@ def _git_clone(url: str, into: Path, tag: str | None = None) -> None:
     if result.returncode != 0:
         stderr = result.stderr.strip()
         if tag:
-            raise RegistryError(
-                f"git clone failed for tag {tag!r}: {stderr}"
-            )
+            raise RegistryError(f"git clone failed for tag {tag!r}: {stderr}")
         raise RegistryError(f"git clone failed: {stderr}")
 
 
@@ -259,9 +257,8 @@ def list_challenges(tags: list[str] | None = None) -> list[ListedChallenge]:
             meta = validate_challenge(child)
         except ChallengeError:
             continue
-        if tags:
-            if not any(t in meta.tags for t in tags):
-                continue
+        if tags and not any(t in meta.tags for t in tags):
+            continue
         out.append(
             ListedChallenge(
                 meta=meta,

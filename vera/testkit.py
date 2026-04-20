@@ -5,16 +5,20 @@ Runs, for each declared variant:
   2. vera start → overlay grader/fixtures/solution/ → grade (must pass).
 Emits the checklist from cli.html § vera-test.
 """
+
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from vera.core import compose, grader, runs, schema
-from vera.core.validate import ChallengeError, validate_challenge
+from vera.core.validate import ChallengeError, ChallengeMeta, validate_challenge
 
 
 class TestkitError(RuntimeError):
@@ -64,7 +68,9 @@ def _overlay(source: Path, target: Path) -> None:
         shutil.copy2(item, dst)
 
 
-def _make_run_dir(root: Path, tmp_runs: Path, pin: dict, variant_name: str) -> runs.ActiveRun:
+def _make_run_dir(
+    root: Path, tmp_runs: Path, pin: dict[str, Any], variant_name: str
+) -> runs.ActiveRun:
     """Manually construct a run dir using the same contract as runs.start()."""
     slug_dir = tmp_runs / root.name
     slug_dir.mkdir(parents=True, exist_ok=True)
@@ -84,11 +90,7 @@ def _make_run_dir(root: Path, tmp_runs: Path, pin: dict, variant_name: str) -> r
     if (root / "scenario").exists():
         _copy_tree(root / "scenario", run_dir / "scenario")
 
-    import json as _json
-    from datetime import datetime as _dt
-    from datetime import timezone as _tz
-
-    start_time = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    start_time = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     run_obj = {
         "slug": root.name,
         "variant": variant_name,
@@ -96,16 +98,14 @@ def _make_run_dir(root: Path, tmp_runs: Path, pin: dict, variant_name: str) -> r
         "pin": pin,
     }
     schema.validate_run_json(run_obj)
-    (run_dir / "run.json").write_text(_json.dumps(run_obj, indent=2) + "\n")
-
-    from vera.core.runs import _parse_iso
+    (run_dir / "run.json").write_text(json.dumps(run_obj, indent=2) + "\n")
 
     return runs.ActiveRun(
         slug=root.name,
         variant=variant_name,
         run_dir=run_dir,
         run_json=run_obj,
-        start_epoch=_parse_iso(start_time),
+        start_epoch=runs.parse_iso(start_time),
     )
 
 
@@ -136,7 +136,7 @@ def _grade_once(run: runs.ActiveRun) -> grader.GradeOutcome:
     return grader.grade(run=run, skip_pin_check=True, keep_stack=False)
 
 
-def _variants_to_test(meta, selection: str | None):
+def _variants_to_test(meta: ChallengeMeta, selection: str | None) -> list[dict[str, Any]]:
     if selection is None:
         return list(meta.variants)
     for v in meta.variants:
@@ -179,7 +179,14 @@ def run(variant: str | None = None) -> Report:
     return Report(lines)
 
 
-def _run_single_variant(v, meta, root, tmp_runs, solution, lines):
+def _run_single_variant(
+    v: dict[str, Any],
+    meta: ChallengeMeta,
+    root: Path,
+    tmp_runs: Path,
+    solution: Path | None,
+    lines: list[ReportLine],
+) -> None:
     pin = {
         "harness": v["harness"],
         "model": v["model"],
@@ -187,50 +194,7 @@ def _run_single_variant(v, meta, root, tmp_runs, solution, lines):
     }
     tag = f"variant {v['name']}"
 
-    pristine = _make_run_dir(root, tmp_runs, pin, f"{v['name']}_pristine")
-    warnings = _bring_up_environment(pristine.run_dir, meta.container)
-    if warnings:
-        lines.append(ReportLine(False, f"setup/ runs cleanly ({tag})", details=warnings))
-        return
-    lines.append(ReportLine(True, f"setup/ runs cleanly ({tag})"))
-
-    try:
-        pristine_outcome = _grade_once(pristine)
-    except grader.GraderError as exc:
-        lines.append(
-            ReportLine(
-                False,
-                f"grader fails on unmodified workspace ({tag})",
-                details=[str(exc)],
-            )
-        )
-        return
-
-    if pristine_outcome.result["pass"] is True:
-        lines.append(
-            ReportLine(
-                False,
-                f"grader fails on unmodified workspace ({tag})",
-                details=[
-                    "grader returned pass:true on pristine workspace",
-                    "the failure mode isn't actually triggered",
-                    "check that setup/setup.sh leaves the workspace in the broken state",
-                ],
-            )
-        )
-        return
-    lines.append(ReportLine(True, f"grader fails on unmodified workspace ({tag})"))
-
-    try:
-        schema.validate_result_json(pristine_outcome.result)
-    except Exception as exc:
-        lines.append(
-            ReportLine(
-                False,
-                f"result.json schema valid on pristine ({tag})",
-                details=[str(exc)],
-            )
-        )
+    if not _run_pristine_phase(v["name"], pin, meta, root, tmp_runs, tag, lines):
         return
 
     if solution is None:
@@ -246,7 +210,79 @@ def _run_single_variant(v, meta, root, tmp_runs, solution, lines):
         )
         return
 
-    solved = _make_run_dir(root, tmp_runs, pin, f"{v['name']}_solution")
+    _run_solution_phase(v["name"], pin, meta, tmp_runs, solution, tag, lines)
+
+
+def _run_pristine_phase(
+    variant_name: str,
+    pin: dict[str, Any],
+    meta: ChallengeMeta,
+    root: Path,
+    tmp_runs: Path,
+    tag: str,
+    lines: list[ReportLine],
+) -> bool:
+    """Run the 'grader must fail on pristine workspace' half. Return True to continue."""
+    pristine = _make_run_dir(root, tmp_runs, pin, f"{variant_name}_pristine")
+    warnings = _bring_up_environment(pristine.run_dir, meta.container)
+    if warnings:
+        lines.append(ReportLine(False, f"setup/ runs cleanly ({tag})", details=warnings))
+        return False
+    lines.append(ReportLine(True, f"setup/ runs cleanly ({tag})"))
+
+    try:
+        outcome = _grade_once(pristine)
+    except grader.GraderError as exc:
+        lines.append(
+            ReportLine(
+                False,
+                f"grader fails on unmodified workspace ({tag})",
+                details=[str(exc)],
+            )
+        )
+        return False
+
+    if outcome.result["pass"] is True:
+        lines.append(
+            ReportLine(
+                False,
+                f"grader fails on unmodified workspace ({tag})",
+                details=[
+                    "grader returned pass:true on pristine workspace",
+                    "the failure mode isn't actually triggered",
+                    "check that setup/setup.sh leaves the workspace in the broken state",
+                ],
+            )
+        )
+        return False
+    lines.append(ReportLine(True, f"grader fails on unmodified workspace ({tag})"))
+
+    try:
+        schema.validate_result_json(outcome.result)
+    except schema.SchemaError as exc:
+        lines.append(
+            ReportLine(
+                False,
+                f"result.json schema valid on pristine ({tag})",
+                details=[str(exc)],
+            )
+        )
+        return False
+
+    return True
+
+
+def _run_solution_phase(
+    variant_name: str,
+    pin: dict[str, Any],
+    meta: ChallengeMeta,
+    tmp_runs: Path,
+    solution: Path,
+    tag: str,
+    lines: list[ReportLine],
+) -> None:
+    """Run the 'grader must pass on planted solution' half."""
+    solved = _make_run_dir(meta.root, tmp_runs, pin, f"{variant_name}_solution")
     _overlay(solution, solved.run_dir / "workspace")
     warnings = _bring_up_environment(solved.run_dir, meta.container)
     if warnings:
@@ -260,7 +296,7 @@ def _run_single_variant(v, meta, root, tmp_runs, solution, lines):
         return
 
     try:
-        solved_outcome = _grade_once(solved)
+        outcome = _grade_once(solved)
     except grader.GraderError as exc:
         lines.append(
             ReportLine(
@@ -271,7 +307,7 @@ def _run_single_variant(v, meta, root, tmp_runs, solution, lines):
         )
         return
 
-    if not solved_outcome.result["pass"]:
+    if not outcome.result["pass"]:
         lines.append(
             ReportLine(
                 False,
@@ -286,9 +322,9 @@ def _run_single_variant(v, meta, root, tmp_runs, solution, lines):
     lines.append(ReportLine(True, f"grader passes on fixtures/solution/ ({tag})"))
 
     try:
-        schema.validate_result_json(solved_outcome.result)
+        schema.validate_result_json(outcome.result)
         lines.append(ReportLine(True, f"result.json schema valid ({tag})"))
-    except Exception as exc:
+    except schema.SchemaError as exc:
         lines.append(
             ReportLine(
                 False,

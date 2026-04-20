@@ -3,6 +3,7 @@
 Uses click.echo + click.style for cross-platform color. Rich is only pulled in for
 the handful of places where structured tables help.
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -35,7 +36,10 @@ def _cwd_shorten(path: Path) -> str:
 
 
 def _format_signal_value(key: str, value: Any, signals: dict[str, Any]) -> str | None:
-    """Render a single grader signal. Suppress 'X_total' counterparts when 'X_passed' handles them."""
+    """Render a single grader signal.
+
+    Suppress 'X_total' counterparts when 'X_passed' handles them.
+    """
     if isinstance(value, bool):
         return "true" if value else "false"
     # tests_passed / tests_total -> "38 / 42"; skip printing tests_total on its own.
@@ -60,6 +64,7 @@ def _variant_label(variant: dict[str, Any]) -> str:
 
 
 # ------------------------------------------------------------------ list
+
 
 def render_list(entries: Iterable, catalog_versions: dict[str, str] | None = None) -> None:
     rows: list[tuple[str, str, str, str, str]] = []
@@ -101,6 +106,7 @@ def render_list(entries: Iterable, catalog_versions: dict[str, str] | None = Non
 
 # ------------------------------------------------------------------ add
 
+
 def render_add(results: list) -> None:
     for r in results:
         reg = _home_shorten(r.registry_path)
@@ -117,6 +123,7 @@ def render_add(results: list) -> None:
 
 # ------------------------------------------------------------------ start
 
+
 def _fmt_bytes(n: int) -> str:
     if n < 1024:
         return f"{n} B"
@@ -125,12 +132,10 @@ def _fmt_bytes(n: int) -> str:
     return f"{n / 1024 / 1024:.1f} MB"
 
 
-def render_start(info) -> None:
+def render_start(info: Any) -> None:
     rel_run = _cwd_shorten(info.run_dir) + "/"
     click.echo(f"→ created  {rel_run}")
-    click.echo(
-        f"→ copied   workspace/ ({info.file_count} files, {_fmt_bytes(info.bytes_copied)})"
-    )
+    click.echo(f"→ copied   workspace/ ({info.file_count} files, {_fmt_bytes(info.bytes_copied)})")
     if info.container:
         ports = "  ".join(info.compose_ports) if info.compose_ports else "up"
         click.echo(f"→ compose  up  ({ports})" if info.compose_ports else "→ compose  up")
@@ -146,7 +151,8 @@ def render_start(info) -> None:
 
 # ------------------------------------------------------------------ status
 
-def render_status(active) -> None:
+
+def render_status(active: Any) -> None:
     run = active.run_json
     run_dir_str = _cwd_shorten(active.run_dir) + "/"
     started = datetime.utcfromtimestamp(active.start_epoch).strftime("%Y-%m-%d %H:%M:%S")
@@ -164,12 +170,16 @@ def render_status(active) -> None:
 
 # ------------------------------------------------------------------ grade
 
-def render_grade(outcome) -> None:
+
+def render_grade(outcome: Any) -> None:
     grader_s = f"{outcome.grader_seconds:.1f}s"
     click.echo(f"running grader/grade.sh ... done ({grader_s})")
-    if outcome.pin_honored != "skipped":
+    if outcome.pin_honored not in ("skipped", "unimplemented"):
         harness_id = outcome.adapter_used.harness_id if outcome.adapter_used else "harness"
         click.echo(f"reading {harness_id} session logs ... done")
+    elif outcome.pin_honored == "unimplemented":
+        harness_id = outcome.adapter_used.harness_id if outcome.adapter_used else "harness"
+        click.echo(f"reading {harness_id} session logs ... skipped (adapter pending)")
     if outcome.compose_down:
         click.echo("tearing down compose ... done")
 
@@ -185,13 +195,19 @@ def render_grade(outcome) -> None:
         click.echo(f"score              {int(score) if float(score).is_integer() else score} / 100")
     budget = outcome.budget_seconds
     budget_str = f"   (budget {timebudget.format_elapsed(budget)})" if budget else ""
-    click.echo(f"elapsed            {timebudget.format_elapsed(outcome.elapsed_seconds)}{budget_str}")
-    click.echo(f"pin honored        {outcome.pin_honored}")
+    elapsed_str = timebudget.format_elapsed(outcome.elapsed_seconds)
+    click.echo(f"elapsed            {elapsed_str}{budget_str}")
+    pin_suffix = (
+        "   (this harness adapter doesn't verify pin yet)"
+        if outcome.pin_honored == "unimplemented"
+        else ""
+    )
+    click.echo(f"pin honored        {outcome.pin_honored}{pin_suffix}")
 
     signals = outcome.result.get("signals") or {}
     if signals:
         click.echo("signals")
-        key_width = max((len(k) for k in signals.keys()), default=0)
+        key_width = max((len(k) for k in signals), default=0)
         for k, v in signals.items():
             val_str = _format_signal_value(k, v, signals)
             if val_str is None:
@@ -205,12 +221,14 @@ def render_grade(outcome) -> None:
 
 # ------------------------------------------------------------------ submit
 
-def render_submit(info) -> None:
+
+def render_submit(info: Any) -> None:
     click.echo(f"appended to {_home_shorten(info.journal_path)}")
     click.echo(click.style("done", fg="green"))
 
 
 # ------------------------------------------------------------------ new
+
 
 def render_new(slug: str, created: list[str]) -> None:
     click.echo(f"created {slug}/")
@@ -227,7 +245,8 @@ def render_new(slug: str, created: list[str]) -> None:
 
 # ------------------------------------------------------------------ test
 
-def render_test(report) -> None:
+
+def render_test(report: Any) -> None:
     for line in report.lines:
         prefix = click.style("✓", fg="green") if line.ok else click.style("✗", fg="red")
         click.echo(f"{prefix} {line.text}")
@@ -242,6 +261,7 @@ def render_test(report) -> None:
 
 # ------------------------------------------------------------------ info
 
+
 def _format_variant_row(v: dict[str, Any]) -> tuple[str, str, str]:
     """Return (name, pin, budget_str) tuple for a variant."""
     name = v["name"]
@@ -251,7 +271,7 @@ def _format_variant_row(v: dict[str, Any]) -> tuple[str, str, str]:
     return name, pin, budget_str
 
 
-def render_info(listed, catalog_version: str | None = None) -> None:
+def render_info(listed: Any, catalog_version: str | None = None) -> None:
     meta = listed.meta
     local_v = listed.version
     header_version = f"@{local_v}" if local_v else ""
@@ -295,7 +315,7 @@ def render_info(listed, catalog_version: str | None = None) -> None:
             click.echo(click.style(f"{indent}{notes}", fg="bright_black"))
 
 
-def render_discover_detail(entry, local_version: str | None = None) -> None:
+def render_discover_detail(entry: Any, local_version: str | None = None) -> None:
     """Detail view for a catalog entry — reachable via `vera discover <slug>`."""
     header_bits = [click.style(entry.slug, fg="yellow"), f"@{entry.version}"]
     if local_version:
@@ -344,7 +364,7 @@ def render_discover_detail(entry, local_version: str | None = None) -> None:
         )
 
 
-def render_discover_pack(pack) -> None:
+def render_discover_pack(pack: Any) -> None:
     """Detail view for a pack slug — reachable via `vera discover <pack-slug>`."""
     click.echo(f"{click.style(pack.title, fg='yellow')}   @{pack.version}   ({pack.slug})")
     if pack.description:
@@ -375,6 +395,7 @@ def render_discover_pack(pack) -> None:
 
 
 # ------------------------------------------------------------------ discover
+
 
 def render_discover(packs: list, singles: list) -> None:
     if not packs and not singles:
@@ -407,6 +428,7 @@ def render_discover(packs: list, singles: list) -> None:
 
 # ------------------------------------------------------------------ update
 
+
 def render_update(updates: list) -> None:
     """updates: list of (slug, old_version, new_version, error|None)."""
     if not updates:
@@ -417,21 +439,14 @@ def render_update(updates: list) -> None:
     slug_w = max(len(u[0]) for u in updates)
     for slug, old, new, error in updates:
         if error:
-            click.echo(
-                f"{click.style('✗', fg='red')} {slug.ljust(slug_w)}   {error}"
-            )
+            click.echo(f"{click.style('✗', fg='red')} {slug.ljust(slug_w)}   {error}")
             any_error = True
             continue
         if old == new:
-            click.echo(
-                f"  {slug.ljust(slug_w)}   @{old or '?'}   (up to date)"
-            )
+            click.echo(f"  {slug.ljust(slug_w)}   @{old or '?'}   (up to date)")
             continue
         any_changed = True
-        click.echo(
-            f"{click.style('↑', fg='green')} {slug.ljust(slug_w)}   "
-            f"{old or '?'} → {new}"
-        )
+        click.echo(f"{click.style('↑', fg='green')} {slug.ljust(slug_w)}   {old or '?'} → {new}")
     if any_changed and not any_error:
         click.echo("")
         click.echo(click.style("done", fg="green"))
@@ -439,7 +454,8 @@ def render_update(updates: list) -> None:
 
 # ------------------------------------------------------------------ adapters
 
-def render_adapters_list(groups) -> None:
+
+def render_adapters_list(groups: Any) -> None:
     def _print_group(title: str, location: Path, adapters: list) -> None:
         click.echo(f"{title}   {_home_shorten(location)}/")
         if not adapters:
@@ -466,7 +482,7 @@ def render_adapters_list(groups) -> None:
             click.echo(f"  {err.source_group} {err.source.name}: {err.reason}")
 
 
-def render_adapters_test(probe) -> None:
+def render_adapters_test(probe: Any) -> None:
     click.echo(
         f"adapter       {probe.adapter.harness_id}  v{probe.adapter.contract_version}   "
         f"{_home_shorten(probe.adapter.source)}"

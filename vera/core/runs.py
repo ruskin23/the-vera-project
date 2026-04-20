@@ -1,7 +1,10 @@
 """Run directory lifecycle: create, write run.json, compute diff, resolve active run."""
+
 from __future__ import annotations
 
+import contextlib
 import json
+import os
 import shutil
 import subprocess
 from dataclasses import dataclass, field
@@ -51,9 +54,12 @@ def _timestamp_folder(now: datetime | None = None) -> str:
     return dt.strftime("%Y-%m-%d_%H%M")
 
 
-def _parse_iso(value: str) -> float:
+def parse_iso(value: str) -> float:
     value = value.replace("Z", "+00:00")
     return datetime.fromisoformat(value).timestamp()
+
+
+_parse_iso = parse_iso  # legacy alias; prefer parse_iso
 
 
 def _copy_tree(src: Path, dst: Path) -> tuple[int, int]:
@@ -63,10 +69,8 @@ def _copy_tree(src: Path, dst: Path) -> tuple[int, int]:
     for p in dst.rglob("*"):
         if p.is_file():
             count += 1
-            try:
+            with contextlib.suppress(OSError):
                 size += p.stat().st_size
-            except OSError:
-                pass
     return count, size
 
 
@@ -74,10 +78,12 @@ def _compose_port_summary(compose_path: Path) -> list[str]:
     """Best-effort list of 'svc on :port' strings for start output."""
     if not compose_path.exists():
         return []
-    from ruamel.yaml import YAML
+    from ruamel.yaml import YAML  # noqa: PLC0415 — heavy third-party dep, loaded lazily
+    from ruamel.yaml.error import YAMLError  # noqa: PLC0415
+
     try:
         data = YAML().load(compose_path.read_text())
-    except Exception:
+    except (OSError, YAMLError):
         return []
     if not isinstance(data, dict):
         return []
@@ -116,6 +122,59 @@ def _resolve_run_root(override: str | None) -> Path:
     return _run_root()
 
 
+def _init_run_dir(root: Path, slug: str, ts: str) -> Path:
+    """Make the run directory, appending a numeric suffix if the timestamped name collides."""
+    slug_dir = root / slug
+    slug_dir.mkdir(parents=True, exist_ok=True)
+    run_dir = slug_dir / ts
+    suffix = 1
+    while run_dir.exists():
+        suffix += 1
+        run_dir = slug_dir / f"{ts}_{suffix}"
+    run_dir.mkdir(parents=True)
+    return run_dir
+
+
+def _copy_challenge_tree(meta_root: Path, run_dir: Path) -> tuple[int, int]:
+    """Copy the challenge layout into the run dir. Returns (workspace file_count, bytes)."""
+    shutil.copyfile(meta_root / "brief.md", run_dir / "brief.md")
+    file_count, bytes_copied = _copy_tree(meta_root / "workspace", run_dir / "workspace")
+    for sub in ("setup", "grader", "scenario"):
+        src = meta_root / sub
+        if src.exists():
+            shutil.copytree(src, run_dir / sub, symlinks=False)
+    return file_count, bytes_copied
+
+
+def _bring_up_setup(run_dir: Path, container: bool) -> list[str]:
+    """Run compose up or setup/setup.sh. Returns compose ports (empty for non-container)."""
+    if container:
+        compose_path = run_dir / "setup" / "compose.yaml"
+        compose.rewrite_compose_for_run(compose_path, run_dir / "workspace")
+        try:
+            compose.up(run_dir)
+        except subprocess.CalledProcessError as exc:
+            compose.down(run_dir)
+            stderr = exc.stderr if isinstance(exc.stderr, str) else ""
+            raise RunError(f"docker compose up failed: {stderr.strip()}") from exc
+        return _compose_port_summary(compose_path)
+
+    setup_sh = run_dir / "setup" / "setup.sh"
+    if setup_sh.exists():
+        if not os.access(setup_sh, os.X_OK):
+            setup_sh.chmod(0o755)
+        result = subprocess.run(
+            [str(setup_sh)],
+            cwd=run_dir,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            raise RunError(f"setup/setup.sh failed (exit {result.returncode}):\n{result.stderr}")
+    return []
+
+
 def start(slug: str, variant: str, run_dir_override: str | None = None) -> StartInfo:
     try:
         meta: ChallengeMeta = resolve(slug)
@@ -130,25 +189,8 @@ def start(slug: str, variant: str, run_dir_override: str | None = None) -> Start
         )
 
     root = _resolve_run_root(run_dir_override)
-    slug_dir = root / slug
-    slug_dir.mkdir(parents=True, exist_ok=True)
-    ts = _timestamp_folder()
-    run_dir = slug_dir / ts
-    suffix = 1
-    while run_dir.exists():
-        suffix += 1
-        run_dir = slug_dir / f"{ts}_{suffix}"
-    run_dir.mkdir(parents=True)
-
-    # Copy brief, workspace, setup, grader — the harness sees these.
-    shutil.copyfile(meta.root / "brief.md", run_dir / "brief.md")
-    file_count, bytes_copied = _copy_tree(meta.root / "workspace", run_dir / "workspace")
-    if (meta.root / "setup").exists():
-        shutil.copytree(meta.root / "setup", run_dir / "setup", symlinks=False)
-    if (meta.root / "grader").exists():
-        shutil.copytree(meta.root / "grader", run_dir / "grader", symlinks=False)
-    if (meta.root / "scenario").exists():
-        shutil.copytree(meta.root / "scenario", run_dir / "scenario", symlinks=False)
+    run_dir = _init_run_dir(root, slug, _timestamp_folder())
+    file_count, bytes_copied = _copy_challenge_tree(meta.root, run_dir)
 
     start_time = _iso_now()
     pin = {
@@ -156,45 +198,17 @@ def start(slug: str, variant: str, run_dir_override: str | None = None) -> Start
         "model": v["model"],
         "time_budget": v.get("time_budget"),
     }
-    challenge_version = read_version(meta.root)
     run_json_obj: dict[str, Any] = {
         "slug": slug,
         "variant": variant,
         "start_time": start_time,
-        "version": challenge_version,
+        "version": read_version(meta.root),
         "pin": pin,
     }
     schema.validate_run_json(run_json_obj)
     (run_dir / "run.json").write_text(json.dumps(run_json_obj, indent=2) + "\n")
 
-    compose_ports: list[str] = []
-    if meta.container:
-        compose_path = run_dir / "setup" / "compose.yaml"
-        compose.rewrite_compose_for_run(compose_path, run_dir / "workspace")
-        try:
-            compose.up(run_dir)
-        except subprocess.CalledProcessError as exc:
-            compose.down(run_dir)
-            stderr = exc.stderr if isinstance(exc.stderr, str) else ""
-            raise RunError(f"docker compose up failed: {stderr.strip()}") from exc
-        compose_ports = _compose_port_summary(compose_path)
-    else:
-        setup_sh = run_dir / "setup" / "setup.sh"
-        if setup_sh.exists():
-            import os as _os
-            if not _os.access(setup_sh, _os.X_OK):
-                setup_sh.chmod(0o755)
-            result = subprocess.run(
-                [str(setup_sh)],
-                cwd=run_dir,
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-            if result.returncode != 0:
-                raise RunError(
-                    f"setup/setup.sh failed (exit {result.returncode}):\n{result.stderr}"
-                )
+    compose_ports = _bring_up_setup(run_dir, meta.container)
 
     return StartInfo(
         slug=slug,
@@ -235,14 +249,14 @@ def _load_run(run_dir: Path) -> ActiveRun | None:
         return None
     try:
         schema.validate_run_json(data)
-    except Exception:
+    except schema.SchemaError:
         return None
     return ActiveRun(
         slug=data["slug"],
         variant=data["variant"],
         run_dir=run_dir,
         run_json=data,
-        start_epoch=_parse_iso(data["start_time"]),
+        start_epoch=parse_iso(data["start_time"]),
     )
 
 
@@ -342,8 +356,10 @@ def submit(run: ActiveRun, target: str | None = None) -> SubmitInfo:
         "result": result,
     }
 
-    if target and (target.startswith(("http://", "https://", "git@", "ssh://")) or target.endswith(".git")):
-        # Remote target — not implemented yet; surface as a recognized intent.
+    is_remote = target and (
+        target.startswith(("http://", "https://", "git@", "ssh://")) or target.endswith(".git")
+    )
+    if is_remote:
         raise RunError("remote journal push is not implemented yet")
 
     journal = Path(target).expanduser() if target else config.journal_path()

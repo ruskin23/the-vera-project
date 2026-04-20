@@ -1,16 +1,24 @@
 """Pin verification + collaboration block derivation.
 
 Both operations iterate the same turn stream from an adapter, so they live together.
-Contract: pin_honored ∈ {yes, no, unclear, skipped}; collaboration block present
-only when pin_honored ∈ {yes, no}.
+Contract: pin_honored ∈ {yes, no, unclear, skipped, unimplemented}; collaboration
+block present only when pin_honored ∈ {yes, no}.
 """
+
 from __future__ import annotations
 
+import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from vera.adapters.loader import LoadedAdapter
+
+
+def _debug(msg: str) -> None:
+    if os.environ.get("VERA_DEBUG"):
+        print(f"vera: {msg}", file=sys.stderr)
 
 
 @dataclass
@@ -84,9 +92,19 @@ def verify_and_collect(
             models_seen=set(),
         )
 
+    if not getattr(adapter.module, "SESSIONS_FOR_RUN_IMPLEMENTED", True):
+        return VerificationOutcome(
+            pin_honored="unimplemented",
+            collaboration=None,
+            sessions_seen=0,
+            turns_seen=0,
+            models_seen=set(),
+        )
+
     try:
         sessions = list(adapter.module.sessions_for_run(workspace_path))
-    except Exception:
+    except Exception as exc:  # adapter contract: any raise degrades to "unclear"
+        _debug(f"adapter {adapter.harness_id}.sessions_for_run raised: {exc!r}")
         sessions = []
 
     if not sessions:
@@ -103,7 +121,8 @@ def verify_and_collect(
     for s in sessions:
         try:
             t = list(adapter.module.session_turns(s))
-        except Exception:
+        except Exception as exc:  # adapter contract: any raise yields no turns for this session
+            _debug(f"adapter {adapter.harness_id}.session_turns raised: {exc!r}")
             t = []
         per_session_turns.append(t)
         all_turns.extend(t)

@@ -7,21 +7,24 @@ Log layout:
 Override root with $OPENCODE_DATA_DIR.
 
 Status: shape-matched, not yet verified end-to-end. `sessions_for_run` returns []
-until opencode's projectHash algorithm is confirmed against real logs; pin
-verification degrades to "unclear" for this harness in the meantime. Diagnostic
-via `vera adapters test` still works through `recent_sessions`.
+and SESSIONS_FOR_RUN_IMPLEMENTED=False so pin verification reports "unimplemented"
+(rather than "unclear") for this harness. Diagnostic via `vera adapters test`
+still works through `recent_sessions`.
 """
+
 from __future__ import annotations
 
 import json
 import os
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
+
+from vera.adapters import _common
 
 HARNESS_ID = "opencode"
 CONTRACT_VERSION = 1
+SESSIONS_FOR_RUN_IMPLEMENTED = False
 
 
 def _root() -> Path:
@@ -61,9 +64,9 @@ def _discover_sessions() -> list[OpencodeSession]:
         return []
     session_root = root / "session"
     message_root = root / "message"
-    sessions: list[OpencodeSession] = []
     if not session_root.exists():
-        return sessions
+        return []
+    sessions: list[OpencodeSession] = []
     for meta in session_root.glob("*/*.json"):
         sid = _session_id(meta)
         if not sid:
@@ -74,8 +77,7 @@ def _discover_sessions() -> list[OpencodeSession]:
             for p in mdir.glob("msg_*.json"):
                 try:
                     mt = p.stat().st_mtime
-                    if mt > mtime:
-                        mtime = mt
+                    mtime = max(mtime, mt)
                 except OSError:
                     continue
         sessions.append(
@@ -94,41 +96,20 @@ def recent_sessions(since_seconds: int) -> list[OpencodeSession]:
     return [s for s in _discover_sessions() if s.mtime >= cutoff]
 
 
-def _parse_ts(raw) -> float | None:
-    if raw is None:
-        return None
-    if isinstance(raw, (int, float)):
-        val = float(raw)
-        return val / 1000.0 if val > 1e12 else val
-    if isinstance(raw, str):
-        try:
-            return datetime.fromisoformat(raw.replace("Z", "+00:00")).astimezone(
-                timezone.utc
-            ).timestamp()
-        except ValueError:
-            return None
-    return None
-
-
 def _is_assistant(entry: dict) -> bool:
     role = (entry.get("role") or entry.get("type") or "").lower()
     return role in ("assistant", "agent", "model")
 
 
 def _tool_calls_from(entry: dict) -> list[dict]:
-    out: list[dict] = []
-    for key in ("tool_calls", "tools", "toolCalls", "parts"):
-        for item in entry.get(key) or []:
-            if isinstance(item, dict):
-                if item.get("type") == "tool-call" or item.get("type") == "tool_use":
-                    name = item.get("name") or item.get("toolName")
-                    if name:
-                        out.append({"kind": name})
-                else:
-                    name = item.get("name") or item.get("kind") or item.get("tool")
-                    if name:
-                        out.append({"kind": name})
-    return out
+    return _common.extract_tool_calls(
+        entry,
+        keys=("tool_calls", "tools", "toolCalls", "parts"),
+        type_filters=(),
+        # opencode allows either {"type": "tool-call"} items or raw dicts; extract_tool_calls
+        # already handles both shapes when type_filters is empty, because name_fields covers
+        # "name"/"kind"/"tool"/"toolName".
+    )
 
 
 def _extract_model(entry: dict) -> str | None:
@@ -153,35 +134,28 @@ def session_turns(session: OpencodeSession) -> list[dict]:
     if not session.message_dir.exists():
         return turns
     for path in sorted(session.message_dir.glob("msg_*.json")):
-        try:
-            data = json.loads(path.read_text())
-        except (OSError, json.JSONDecodeError):
+        entries = _common.read_json_entries(path, top_keys=())
+        if not entries:
             continue
-        if not isinstance(data, dict):
-            continue
+        data = entries[0]
         if not _is_assistant(data):
             continue
         model = _extract_model(data)
         if not model:
             continue
-        ts = _parse_ts(
+        ts = _common.parse_ts(
             data.get("timestamp")
             or data.get("ts")
             or data.get("time")
             or data.get("createdAt")
-            or data.get("created_at")
+            or data.get("created_at"),
+            ms_if_large=True,
         )
         if ts is None:
             try:
                 ts = path.stat().st_mtime
             except OSError:
                 ts = 0.0
-        turns.append(
-            {
-                "ts": ts,
-                "model": model,
-                "tool_calls": _tool_calls_from(data),
-            }
-        )
+        turns.append({"ts": ts, "model": model, "tool_calls": _tool_calls_from(data)})
     turns.sort(key=lambda t: t["ts"])
     return turns
