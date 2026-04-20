@@ -1,0 +1,13 @@
+slug: challenge-simple
+title: "Simple challenge fixture"
+description: "A minimal challenge used by the Vera test suite."
+container: false
+tags:
+  - fixture
+  - unit
+
+variants:
+  - name: baseline
+    harness: claude-code
+    model: claude-opus-4-7
+    time_budget: 30m

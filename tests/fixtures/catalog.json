@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "slug": "solo-challenge",
+      "type": "single",
+      "title": "A solo challenge",
+      "description": "Just one challenge in its own repo.",
+      "url": "https://github.com/alice/solo-challenge",
+      "version": "v1.0.0",
+      "tags": ["python", "fixtures"],
+      "author": "alice",
+      "difficulty": "easy"
+    },
+    {
+      "slug": "vera-starter-pack",
+      "type": "pack",
+      "title": "Vera starter pack",
+      "description": "Curated collection of canonical challenges.",
+      "url": "https://github.com/vera/vera-starter-pack",
+      "version": "v1.2.0",
+      "author": "vera",
+      "challenges": [
+        {
+          "slug": "blog-api-auth",
+          "path": "challenges/blog-api-auth",
+          "title": "Blog API auth bug",
+          "tags": ["fastapi", "auth"],
+          "difficulty": "easy"
+        },
+        {
+          "slug": "fifo-queue-redesign",
+          "path": "challenges/fifo-queue-redesign",
+          "title": "FIFO queue redesign",
+          "tags": ["perf", "redis"],
+          "difficulty": "hard"
+        }
+      ]
+    }
+  ]
+}
